@@ -15,9 +15,15 @@ class ahwigenerator {
     // ----------------------------------------------------------------------
     // INTERNAL CONFIG
     // ----------------------------------------------------------------------
+    var $sSourceUrl = "https://github.com/axelhahn/ahwebinstall";
     var $sSourceClass = "ahwi-installer.class.php";
     var $sPrjDir = false;
     var $sOutDir = false;
+    var $sCfgfile = false;
+    
+    var $aExit=array(
+        
+    );
 
     // ----------------------------------------------------------------------
     // METHODS
@@ -35,7 +41,7 @@ class ahwigenerator {
     }
 
     /**
-     * get a flat list of existng project configs
+     * get a flat list of existing project configs
      * 
      * @return array
      */
@@ -165,9 +171,12 @@ class ahwigenerator {
                     } elseif ($tn == T_COMMENT || $tn == T_DOC_COMMENT) {
                         $iw = true;
                     } else {
+                        /*
                         if (!$ih) {
                             $ts = strtolower($ts);
                         }
+                         * 
+                         */
                         $new .= $ts;
                         $iw = false;
                     }
@@ -184,6 +193,45 @@ class ahwigenerator {
         return $new;
     }
 
+    
+    private function _checkCfgfile($aCfg){
+        $sErrors='';
+        if(!is_array($aCfg)){
+            echo "ERROR: given config is an invalid json.\n";
+            exit(3);
+        }
+        if(!array_key_exists("installer", $aCfg)){
+            $sErrors.="ERROR: wrong config - missing section [installer].\n";
+        } else {
+            foreach(array("product", "source", "installdir") as $sKey){
+                if(!array_key_exists($sKey, $aCfg['installer'])){
+                    $sErrors.="ERROR: wrong config - missing section [installer][$sKey].\n";
+                }
+            }
+        }
+        if($sErrors){
+            echo $sErrors;
+            exit (3);
+        }
+        return $aCfg;
+    }
+    
+    
+    private function _getConfigFromFile($sCfgfile){
+        if (!file_exists($sCfgfile)) {
+            echo "ERROR: given config does not exist.\n";
+            exit(1);
+        }
+        $sCfg = file_get_contents($sCfgfile);
+        $aCfg = $this->_checkCfgfile(json_decode($sCfg, true));
+        if(!$aCfg){
+            echo "ERROR: config is invalid.\n";
+            exit(2);
+        }
+        return $aCfg;
+    }
+
+
     /**
      * (re)generate installer of a single project
      * 
@@ -192,26 +240,30 @@ class ahwigenerator {
      */
     public function generate($sCfgfile) {
         echo "INFO: starting generator using $sCfgfile\n";
-        if (!file_exists($sCfgfile)) {
-            echo "ERROR: given config does not exist.\n";
-            exit(1);
-        }
 
-        $sCfg = file_get_contents($sCfgfile);
-        $aCfg = json_decode($sCfg, true);
+        
+        
+        $aCfg = $this->_getConfigFromFile($sCfgfile);
+        $sCfgJsonOut = (defined('JSON_PRETTY_PRINT'))
+            ? json_encode($aCfg['installer'], JSON_PRETTY_PRINT)
+            : json_encode($aCfg['installer'])
+            ;
         // print_r($aCfg);
         
         // generate the installer
         $sContent = '';
-        $sContent.="<?php \n/*\n\n"
-                . "    THIS IS A GENERATED PHP WEB INSTALLER \n"
-                . "    FOR [" . $aCfg['product'] . "]\n"
-                . "\n"
-                // ."sourcefile: $sCfgfile\n"
-                . "    generated on " . date("Y-m-d H:i:s") . "\n"
-                . "*/ \n"
-                . "?>\n"
-                . $this->_compress_php_src(file_get_contents(__DIR__ . '/ahwi-installer.class.php'))
+        $sContent.="<?php \n"
+                . "// ----------------------------------------------------------------------\n"
+                . "//\n"
+                . "//   This is an installer for\n"
+                . "//   " . $aCfg['installer']['product'] . "\n"
+                . "//\n"
+                . "//   (generated on " . date("Y-m-d H:i:s") . ")\n"
+                . "//\n"
+                . "// ----------------------------------------------------------------------\n"
+                . "//   If you want to use this installer in your own projects\n"
+                . "//   see ".$this->sSourceUrl."\n"
+                . "// ----------------------------------------------------------------------\n"
                 . "\n"
                 . "// ----------------------------------------------------------------------\n"
                 . "// CONFIG\n"
@@ -219,9 +271,14 @@ class ahwigenerator {
                 ."\n"
                 . "global \$aCfg;\n"
                 ."\$aCfg=json_decode(\n"
-                ."'" . $sCfg . "'\n"
+                ."'" . $sCfgJsonOut . "'"
                 .", true);\n"
                 ."\n"
+                . "?>\n"
+                // . file_get_contents(__DIR__ . '/ahwi-installer.class.php')
+                . $this->_compress_php_src(file_get_contents(__DIR__ . '/ahwi-installer.class.php'))
+                . "\n"
+                . "\n"
                 ."// ----------------------------------------------------------------------\n"
                 ."// MAIN\n"
                 ."// ----------------------------------------------------------------------\n"

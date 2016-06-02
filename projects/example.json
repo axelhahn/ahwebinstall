@@ -1,6 +1,11 @@
 {
-    "product": "My example tool",
-    "source": "http://sourceforge.net/projects/my-example-tool/files/latest/download",
-    "installdir": "example-tool",
-    "tmpzip": "_example-tool-latest.zip"
+    "generator":{
+        
+    },
+    "installer":{
+        "product": "My example tool",
+        "source": "http://sourceforge.net/projects/my-example-tool/files/latest/download",
+        "installdir": "example-tool",
+        "tmpzip": "_example-tool-latest.zip"
+    }
 }

@@ -26,6 +26,9 @@ class ahwi {
     // METHODS
     // ----------------------------------------------------------------------
     public function __construct($aCfg) {
+        if(!function_exists("curl_init")){
+            die("ERROR: curl module is required. please install php5-curl first.");
+        }
         $this->iTimeStart = microtime(true);
         $this->_setConfig($aCfg);
         return true;
@@ -95,7 +98,7 @@ class ahwi {
             $sData = $this->_httpGet($sUrl);
             echo strlen($sData) . " byte\n";
             if (strlen($sData) < 100000) {
-                die("FATAL ERROR: download failed.\n");
+                die("FATAL ERROR: download failed. The download file seems to be too small.\n");
             }
             file_put_contents($sZipfile, $sData);
             echo "file was saved: $sZipfile\n";
@@ -126,10 +129,13 @@ class ahwi {
         if ($res === TRUE) {
             $zip->extractTo($sTargetPath);
             $zip->close();
-            echo "SUCCESS: files were extracted to directory $sTargetPath.\n";
+            echo "SUCCESS: files were extracted to directory \"$sTargetPath\".\n";
             // unlink($sZipfile);
         } else {
             die("ERROR: unable to open ZIP file\n");
+        }
+        if (array_key_exists('postmessage', $this->aCfg)){
+            echo $this->aCfg['postmessage']."\n";
         }
     }
 
