@@ -6,6 +6,7 @@
         "product": "My example tool",
         "source": "http://sourceforge.net/projects/my-example-tool/files/latest/download",
         "installdir": "example-tool",
+        "postmessage": "And now ... open http:\/\/localhost\/example-tool\/ in your webbrowser ...",
         "tmpzip": "_example-tool-latest.zip"
     }
 }

@@ -7,6 +7,8 @@
  * I N S T A L L E R
  * 
  * STATUS: alpha - do not use yet
+ * 
+ * @author Axel Hahn
  */
 
 /**
@@ -26,8 +28,8 @@ class ahwi {
     // METHODS
     // ----------------------------------------------------------------------
     public function __construct($aCfg) {
-        if(!function_exists("curl_init")){
-            die("ERROR: curl module is required. please install php5-curl first.");
+        if (!function_exists("curl_init")) {
+            die("ERROR: curl module is required for this installer. Please install php5-curl first.");
         }
         $this->iTimeStart = microtime(true);
         $this->_setConfig($aCfg);
@@ -97,7 +99,7 @@ class ahwi {
             echo "INFO: fetching $sUrl ...\n";
             $sData = $this->_httpGet($sUrl);
             echo strlen($sData) . " byte\n";
-            if (strlen($sData) < 100000) {
+            if (strlen($sData) < 1000) {
                 die("FATAL ERROR: download failed. The download file seems to be too small.\n");
             }
             file_put_contents($sZipfile, $sData);
@@ -109,8 +111,45 @@ class ahwi {
         return true;
     }
 
-    function postinstall() {
-        return true;
+    protected function _moveIfSingleSubdir($sSubdir, $aEntries) {
+        $sTargetPath = $this->aCfg['installdir'];
+        $sFirstDir = $sTargetPath . '/' . $sSubdir;
+
+        // rsort($aEntries);
+        $aErrors=array();
+        echo "INFO: Moving $sFirstDir to $sTargetPath \n";
+        foreach ($aEntries as $sEntry) {
+            $sFrom = $sTargetPath . '/' . $sEntry;
+            $sTo = str_replace($sTargetPath . '/'.$sSubdir.'/', $sTargetPath . '/', $sFrom);
+            echo "... ";
+            if (is_dir($sFrom)){
+                echo "INFO: directory $sFrom";
+                if (is_dir($sTo)){
+                    echo " already exists.";
+                } else {
+                    if (mkdir($sTo, 0750, true)){
+                        echo " $sTo was created.";
+                    } else {
+                        echo " FAILED to create $sTo.";
+                        $aErrors[]="failed to create directory $sTo";
+                    }
+                }
+            } else {
+                echo (file_exists($sTo) ? 'UPDATE ' : 'CREATE ');
+                if (copy($sFrom, $sTo)){
+                    echo " $sTo was OK.";
+                } else {
+                    echo " FAILED to copy to $sTo.";
+                    $aErrors[]="failed copy $sFrom to $sTo";
+                }
+            }
+            echo "\n";
+        }
+
+        if (count($aErrors)){
+            echo "ERRORS occured ... keeping $sSubdir\n";
+        }
+        echo "INFO: TODO need to cleanup $sSubdir\n";
     }
 
     /**
@@ -128,16 +167,38 @@ class ahwi {
         $res = $zip->open($sZipfile);
         if ($res === TRUE) {
             $zip->extractTo($sTargetPath);
+            $aDirs=array();
+            $aEntries=array();
+            for ($i = 0; $i < $zip->numFiles; $i++) {
+                $sFirstDir=preg_replace('#[/\\\].*#', '', dirname($zip->getNameIndex($i).'x'));
+                $aDirs[$sFirstDir]=1;
+                $aEntries[]=$zip->getNameIndex($i);
+                echo '... ' . $zip->getNameIndex($i) . " - $sFirstDir\n";
+            }
+            echo $zip->getStatusString() . "\n";
+            echo $zip->numFiles . " entries.\n";
             $zip->close();
             echo "SUCCESS: files were extracted to directory \"$sTargetPath\".\n";
+
+            print_r(array_keys($aDirs));
+            if(count(array_keys($aDirs))===1){
+                $this->_moveIfSingleSubdir($sFirstDir, $aEntries);
+            }
+            
             // unlink($sZipfile);
         } else {
             die("ERROR: unable to open ZIP file\n");
         }
-        if (array_key_exists('postmessage', $this->aCfg)){
-            echo $this->aCfg['postmessage']."\n";
+        if (array_key_exists('postmessage', $this->aCfg)) {
+            echo $this->aCfg['postmessage'] . "\n";
         }
     }
+
+
+    function postinstall() {
+        return true;
+    }
+
 
     /**
      * show welcome message

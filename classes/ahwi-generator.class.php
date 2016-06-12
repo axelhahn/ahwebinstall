@@ -1,6 +1,6 @@
 <?php
-/**
- * 
+
+/*
  * AXEL HAHN's PHP WEB INSTALLER
  * www.axel-hahn.de
  * 
@@ -10,59 +10,77 @@
  *
  * @author Axel Hahn
  */
-class ahwigenerator {
 
+class ahwigenerator {
     // ----------------------------------------------------------------------
     // INTERNAL CONFIG
     // ----------------------------------------------------------------------
-    var $sSourceUrl = "https://github.com/axelhahn/ahwebinstall";
-    var $sSourceClass = "ahwi-installer.class.php";
-    var $sPrjDir = false;
-    var $sOutDir = false;
-    var $sCfgfile = false;
+
+    /**
+     * ahwi source url
+     * @var string
+     */
+    protected $_sSourceUrl = "https://github.com/axelhahn/ahwebinstall";
+
+    /**
+     * filename of the installer class; this will be included in the generator
+     * to build the installer
+     * @var string
+     */
+    protected $_sInstallerClass = "ahwi-installer.class.php";
+
+    /**
+     * project dir
+     * @var string
+     */
+    protected $_sPrjDir = false;
+
+    /**
+     * output dir
+     * @var string
+     */
+    protected $_sOutDir = false;
     
-    var $aExit=array(
-        
-    );
+    /**
+     * flag: compress file $_sInstallerClass in generated installer?
+     * suggestion: true
+     * @var type 
+     */
+    protected $_bCompressInstaller = false;
 
     // ----------------------------------------------------------------------
-    // METHODS
+    // INIT
     // ----------------------------------------------------------------------
-    
+
     /**
      * init ahwigenerator
      * @return boolean
      */
     public function __construct() {
-        $this->sOutDir = str_replace('\\', '/', dirname(__DIR__) . '/output/');
-        $this->sPrjDir = str_replace('\\', '/', dirname(__DIR__) . '/projects/');
+        $sBasedir = dirname(__DIR__);
+        $this->_sOutDir = str_replace('\\', '/', $sBasedir . '/output/');
+        $this->_sPrjDir = str_replace('\\', '/', $sBasedir . '/projects/');
 
         return true;
     }
 
-    /**
-     * get a flat list of existing project configs
-     * 
-     * @return array
-     */
-    public function getProjects() {
-        $aReturn = array();
-
-        foreach (glob($this->sPrjDir . '*.json') as $sFilename) {
-            $aReturn[] = $sFilename;
-        }
-        return $aReturn;
-    }
+    // ----------------------------------------------------------------------
+    // PRIVATE METHODS
+    // ----------------------------------------------------------------------
 
     /**
      * minify php string
      * SOURCE: http://php.net/manual/en/function.php-strip-whitespace.php
+     * with removed lowercase function
      * 
      * @staticvar array $IW
      * @param string $src  php code
      * @return string
      */
-    private function _compress_php_src($src) {
+    protected function _compress_php_src($src) {
+        if(!$this->_bCompressInstaller){
+            return $src;
+        }
         // Whitespaces left and right from this signs can be ignored
         static $IW = array(
             T_CONCAT_EQUAL, // .=
@@ -172,9 +190,11 @@ class ahwigenerator {
                         $iw = true;
                     } else {
                         /*
-                        if (!$ih) {
-                            $ts = strtolower($ts);
-                        }
+                         * Axel: DISABLE lowercase - it has bad impact on constants
+                         * 
+                          if (!$ih) {
+                          $ts = strtolower($ts);
+                          }
                          * 
                          */
                         $new .= $ts;
@@ -193,44 +213,78 @@ class ahwigenerator {
         return $new;
     }
 
-    
-    private function _checkCfgfile($aCfg){
-        $sErrors='';
-        if(!is_array($aCfg)){
+    /**
+     * check a given config array; if OK it returns all valid data.
+     * It sends a die() if the config is wrong.
+     * 
+     * @param array  $aCfg
+     * @return array
+     */
+    protected function _checkCfgfile($aCfg) {
+        $sErrors = '';
+        if (!is_array($aCfg)) {
             echo "ERROR: given config is an invalid json.\n";
             exit(3);
         }
-        if(!array_key_exists("installer", $aCfg)){
+        if (!array_key_exists("installer", $aCfg)) {
             $sErrors.="ERROR: wrong config - missing section [installer].\n";
         } else {
-            foreach(array("product", "source", "installdir") as $sKey){
-                if(!array_key_exists($sKey, $aCfg['installer'])){
+            foreach (array("product", "source", "installdir") as $sKey) {
+                if (!array_key_exists($sKey, $aCfg['installer'])) {
                     $sErrors.="ERROR: wrong config - missing section [installer][$sKey].\n";
                 }
             }
         }
-        if($sErrors){
+        if ($sErrors) {
             echo $sErrors;
-            exit (3);
+            exit(3);
         }
         return $aCfg;
     }
-    
-    
-    private function _getConfigFromFile($sCfgfile){
+
+    /**
+     * read data from a given project config file
+     * 
+     * @see getProjectFiles() to get all project files
+     * 
+     * @param string $sCfgfile  full path of a config file
+     * @return array
+     */
+    protected function _getConfigFromFile($sCfgfile) {
         if (!file_exists($sCfgfile)) {
             echo "ERROR: given config does not exist.\n";
             exit(1);
         }
         $sCfg = file_get_contents($sCfgfile);
         $aCfg = $this->_checkCfgfile(json_decode($sCfg, true));
-        if(!$aCfg){
+        if (!$aCfg) {
             echo "ERROR: config is invalid.\n";
             exit(2);
         }
         return $aCfg;
     }
 
+    // ----------------------------------------------------------------------
+    // GETTER
+    // ----------------------------------------------------------------------
+
+    /**
+     * get a flat list of existing project config files
+     * 
+     * @return array
+     */
+    public function getProjectFiles() {
+        $aReturn = array();
+
+        foreach (glob($this->_sPrjDir . '*.json') as $sFilename) {
+            $aReturn[] = $sFilename;
+        }
+        return $aReturn;
+    }
+
+    // ----------------------------------------------------------------------
+    // GENERATE
+    // ----------------------------------------------------------------------
 
     /**
      * (re)generate installer of a single project
@@ -241,15 +295,10 @@ class ahwigenerator {
     public function generate($sCfgfile) {
         echo "INFO: starting generator using $sCfgfile\n";
 
-        
-        
         $aCfg = $this->_getConfigFromFile($sCfgfile);
-        $sCfgJsonOut = (defined('JSON_PRETTY_PRINT'))
-            ? json_encode($aCfg['installer'], JSON_PRETTY_PRINT)
-            : json_encode($aCfg['installer'])
-            ;
+        $sCfgJsonOut = (defined('JSON_PRETTY_PRINT')) ? json_encode($aCfg['installer'], JSON_PRETTY_PRINT) : json_encode($aCfg['installer'])
+        ;
         // print_r($aCfg);
-        
         // generate the installer
         $sContent = '';
         $sContent.="<?php \n"
@@ -262,37 +311,36 @@ class ahwigenerator {
                 . "//\n"
                 . "// ----------------------------------------------------------------------\n"
                 . "//   If you want to use this installer in your own projects\n"
-                . "//   see ".$this->sSourceUrl."\n"
+                . "//   see " . $this->_sSourceUrl . "\n"
                 . "// ----------------------------------------------------------------------\n"
                 . "\n"
                 . "// ----------------------------------------------------------------------\n"
                 . "// CONFIG\n"
                 . "// ----------------------------------------------------------------------\n"
-                ."\n"
+                . "\n"
                 . "global \$aCfg;\n"
-                ."\$aCfg=json_decode(\n"
-                ."'" . $sCfgJsonOut . "'"
-                .", true);\n"
-                ."\n"
+                . "\$aCfg=json_decode(\n"
+                . "'" . $sCfgJsonOut . "'"
+                . ", true);\n"
+                . "\n"
                 . "?>\n"
-                // . file_get_contents(__DIR__ . '/ahwi-installer.class.php')
-                . $this->_compress_php_src(file_get_contents(__DIR__ . '/ahwi-installer.class.php'))
+                . $this->_compress_php_src(file_get_contents(__DIR__ . '/' . $this->_sInstallerClass))
                 . "\n"
                 . "\n"
-                ."// ----------------------------------------------------------------------\n"
-                ."// MAIN\n"
-                ."// ----------------------------------------------------------------------\n"
-                ."\n"
-                ."\$oInstaller = new ahwi(\$aCfg);\n"
-                ."\n"
-                ."\$oInstaller->welcome();\n"
-                ."\$oInstaller->download();\n"
-                ."\$oInstaller->install();\n"
-                // ."\$oInstaller->postinstall();\n"
-                ;
+                . "// ----------------------------------------------------------------------\n"
+                . "// MAIN\n"
+                . "// ----------------------------------------------------------------------\n"
+                . "\n"
+                . "\$oInstaller = new ahwi(\$aCfg);\n"
+                . "\n"
+                . "\$oInstaller->welcome();\n"
+                . "\$oInstaller->download();\n"
+                . "\$oInstaller->install();\n"
+        // ."\$oInstaller->postinstall();\n"
+        ;
 
         // write installer file to output dir
-        $sOutFile = $this->sOutDir
+        $sOutFile = $this->_sOutDir
                 . str_replace('.json', '', basename($sCfgfile))
                 . '/installer.php'
         ;
@@ -303,7 +351,7 @@ class ahwigenerator {
         }
 
         file_put_contents($sOutFile, $sContent);
-        echo "DONE: installer file was generated: $sOutFile\n";
+        echo "DONE: installer file was generated: $sOutFile\n\n";
         return true;
     }
 
@@ -313,8 +361,8 @@ class ahwigenerator {
      * @return boolean
      */
     public function generateAll() {
-        echo "INFO: starting to generate all...\n";
-        foreach ($this->getProjects() as $sCfgfile) {
+        echo "INFO: starting to generate all...\n\n";
+        foreach ($this->getProjectFiles() as $sCfgfile) {
             $this->generate($sCfgfile);
         }
         echo "DONE: generate all...\n";
