@@ -37,7 +37,7 @@ class ahwi {
     }
 
     /**
-     * make an http get request and return the response body
+     * make an http(s) get request and return the response body
      * @param string   $url          url to fetch
      * @param boolean  $bHeaderOnly  send header only
      * @return string
@@ -55,7 +55,6 @@ class ahwi {
         curl_setopt($ch, CURLOPT_USERAGENT, 'php-curl :: web installer');
         curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 0);
         curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, 0);
-        // curl_setopt($ch, CURLOPT_FOLLOWLOCATION, 1);
 
         $res = curl_exec($ch);
         curl_close($ch);
@@ -70,7 +69,7 @@ class ahwi {
     private function _setConfig($aCfg = array()) {
         // verify array
         $sErrors = '';
-        foreach (array('product', 'source', 'installdir', 'tmpzip') as $sKey) {
+        foreach (array('product', 'source', 'installdir') as $sKey) {
             if (!array_key_exists($sKey, $aCfg)) {
                 $sErrors.="ERROR: missing key $sKey ...\n";
             }
@@ -82,6 +81,17 @@ class ahwi {
         $this->aCfg = $aCfg;
         return $this->aCfg;
     }
+    
+    private function _getZipfilename() {
+        $sZipfile=(getenv('temp') ? getenv('temp') : '/tmp')
+                .'/'
+                .str_replace(" ", "_", $this->aCfg['product'])
+                .'__'
+                .md5($this->aCfg['source'])
+                .'.zip'
+                ;
+        return $sZipfile;
+    }
 
     /**
      * download latest package of the product
@@ -89,7 +99,8 @@ class ahwi {
      */
     function download() {
         $sUrl = $this->aCfg['source'];
-        $sZipfile = $this->aCfg['tmpzip'];
+        // $sZipfile = $this->aCfg['tmpzip'];
+        $sZipfile = $this->_getZipfilename();
 
         if (file_exists($sZipfile)) {
             // unlink($sZipfile);
@@ -117,7 +128,7 @@ class ahwi {
 
         // rsort($aEntries);
         $aErrors=array();
-        echo "INFO: Moving $sFirstDir to $sTargetPath \n";
+        echo "INFO: Copying entries from $sFirstDir to $sTargetPath.\n";
         foreach ($aEntries as $sEntry) {
             $sFrom = $sTargetPath . '/' . $sEntry;
             $sTo = str_replace($sTargetPath . '/'.$sSubdir.'/', $sTargetPath . '/', $sFrom);
@@ -147,16 +158,41 @@ class ahwi {
         }
 
         if (count($aErrors)){
-            echo "ERRORS occured ... keeping $sSubdir\n";
+            echo "ERRORS occured ... keeping subdir $sSubdir with all latest files.\n";
+        } else {
+            echo "INFO: Copy was successful. Now cleaning up dir $sSubdir ...\n";
+            rsort($aEntries);
+            foreach ($aEntries as $sEntry) {
+                $sFrom = $sTargetPath . '/' . $sEntry;
+                if (is_dir($sFrom)){
+                    if (rmdir($sFrom)){
+                        echo "... DELETED DIR $sFrom\n";
+                    } else {
+                        echo "... ERROR: DIR NOT DELETED $sFrom\n";
+                        $aErrors[]="failed delete dir $sFrom";
+                    }
+                } else {
+                    if (unlink($sFrom)){
+                        echo "... DELETED $sFrom\n";
+                    } else {
+                        echo "... ERROR: NOT DELETED $sFrom\n";
+                        $aErrors[]="failed delete $sFrom";
+                    }
+                }
+            }
         }
-        echo "INFO: TODO need to cleanup $sSubdir\n";
+        if (count($aErrors)){
+            echo "ERRORS occured while deleting ... some entries in subdir $sSubdir still exist.\n";
+        } else {
+            echo "OK, cleanup was successful\n";
+        }
     }
-
     /**
      * install/ unzip
      */
     function install() {
-        $sZipfile = $this->aCfg['tmpzip'];
+        // $sZipfile = $this->aCfg['tmpzip'];
+        $sZipfile = $this->_getZipfilename();
         $sTargetPath = $this->aCfg['installdir'];
         $zip = new ZipArchive;
         if (is_dir($sTargetPath)) {
@@ -176,11 +212,11 @@ class ahwi {
                 echo '... ' . $zip->getNameIndex($i) . " - $sFirstDir\n";
             }
             echo $zip->getStatusString() . "\n";
-            echo $zip->numFiles . " entries.\n";
+            echo $zip->numFiles . " entries are in the zip file.\n";
             $zip->close();
             echo "SUCCESS: files were extracted to directory \"$sTargetPath\".\n";
 
-            print_r(array_keys($aDirs));
+            // print_r(array_keys($aDirs));
             if(count(array_keys($aDirs))===1){
                 $this->_moveIfSingleSubdir($sFirstDir, $aEntries);
             }

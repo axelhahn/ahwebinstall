@@ -46,7 +46,7 @@ class ahwigenerator {
      * suggestion: true
      * @var type 
      */
-    protected $_bCompressInstaller = false;
+    protected $_bCompressInstaller = true;
 
     // ----------------------------------------------------------------------
     // INIT
