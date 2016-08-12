@@ -44,8 +44,7 @@ Go to the projects directory and create a copy of the example.json
         "product": "My example tool",
         "source": "http://sourceforge.net/projects/my-example-tool/files/latest/download",
         "installdir": "example-tool",
-        "postmessage": "And now ... open http:\/\/localhost\/example-tool\/ in your webbrowser ...",
-        "tmpzip": "_example-tool-latest.zip"
+        "postmessage": "And now ... open http:\/\/localhost\/example-tool\/ in your webbrowser ..."
     }
 }
 </pre>
@@ -69,10 +68,8 @@ Change the settings:
 
 ### For installer
 
-* handle zips with a subdir inside (i.e. Github master zip)
 * set permissions to files and dirs
 * define pre and post commands
-* remove tmpzip in the json config file and handle it the generator or installer
 
 <!--
 
