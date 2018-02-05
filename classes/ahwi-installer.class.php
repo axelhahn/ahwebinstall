@@ -29,13 +29,23 @@ class ahwi {
     // ----------------------------------------------------------------------
     public function __construct($aCfg) {
         if (!function_exists("curl_init")) {
-            die("ERROR: curl module is required for this installer. Please install php5-curl first.");
+            die("ERROR: curl module is required for this installer. Please install php-curl first.");
+        }
+        // on windows the function does not exst
+        if (function_exists("posix_getpwuid")){
+            $processUser = posix_getpwuid(posix_geteuid());
+            if ($processUser['name']=="root"){
+                die("Do not start the installer as user root\n");
+            }
         }
         $this->iTimeStart = microtime(true);
         $this->_setConfig($aCfg);
         return true;
     }
 
+    // ----------------------------------------------------------------------
+    // private functions
+    // ----------------------------------------------------------------------
     /**
      * make an http(s) get request and return the response body
      * @param string   $url          url to fetch
@@ -62,8 +72,12 @@ class ahwi {
     }
 
     /**
-     * set config
-     * @param array $aCfg  new project data
+     * set config array and verify required keys
+     * @param array $aCfg  new project data; keys are:
+     *      product     - required: name of the product to install (string)
+     *      source      - required: download url (string)
+     *      installdir  - required: local path where to unzip (string)
+     *      tmpzip      - optional: name of local download file as filenamewith full path (string)
      * @return array
      */
     private function _setConfig($aCfg = array()) {
@@ -82,7 +96,18 @@ class ahwi {
         return $this->aCfg;
     }
     
+    /**
+     * get the filename of the download targezt / local zip with full path
+     * It returns option "tmpzip" if it exists or a generated filename in 
+     * system temp directory
+     * @return string
+     */
     private function _getZipfilename() {
+        // if it was defined in config then return it
+        if (isset($this->aCfg['tmpzip'])){
+            return $this->aCfg['tmpzip'];
+        }
+        // ... otherwise generate somethin in system temp
         $sZipfile=(getenv('temp') ? getenv('temp') : '/tmp')
                 .'/'
                 .str_replace(" ", "_", $this->aCfg['product'])
@@ -92,36 +117,14 @@ class ahwi {
                 ;
         return $sZipfile;
     }
-
+    
     /**
-     * download latest package of the product
-     * @return bool
+     * helper function after exracting zip file: skip a single subdir
+     * (like zips in github)
+     * 
+     * @param type $sSubdir
+     * @param type $aEntries
      */
-    function download() {
-        $sUrl = $this->aCfg['source'];
-        // $sZipfile = $this->aCfg['tmpzip'];
-        $sZipfile = $this->_getZipfilename();
-
-        if (file_exists($sZipfile)) {
-            // unlink($sZipfile);
-        }
-
-        if (!file_exists($sZipfile)) {
-            echo "INFO: fetching $sUrl ...\n";
-            $sData = $this->_httpGet($sUrl);
-            echo strlen($sData) . " byte\n";
-            if (strlen($sData) < 1000) {
-                die("FATAL ERROR: download failed. The download file seems to be too small.\n");
-            }
-            file_put_contents($sZipfile, $sData);
-            echo "file was saved: $sZipfile\n";
-        } else {
-            echo "INFO: using existing $sZipfile (no download)\n";
-        }
-
-        return true;
-    }
-
     protected function _moveIfSingleSubdir($sSubdir, $aEntries) {
         $sTargetPath = $this->aCfg['installdir'];
         $sFirstDir = $sTargetPath . '/' . $sSubdir;
@@ -187,19 +190,108 @@ class ahwi {
             echo "OK, cleanup was successful\n";
         }
     }
+    // ----------------------------------------------------------------------
+    // GETTER
+    // read the options after initializing 
+    // ----------------------------------------------------------------------
+    
     /**
-     * install/ unzip
+     * get name of the local installation directory as full path
+     * @return string
+     */
+    public function getInstalldir(){
+        return $this->aCfg['installdir'];
+    }
+    
+    /**
+     * get name of product to install
+     * @return string
+     */
+    public function getProduct(){
+        return $this->aCfg['product'];
+    }
+    
+    /**
+     * get url of new sources
+     * @return string
+     */
+    public function getSource() {
+        return $this->aCfg['source'];
+    }
+    
+    /**
+     * get local filename for downloaded zip file
+     * @return string
+     */
+    public function getTmpzip() {
+        return $this->_getZipfilename();
+    }
+    
+    // ----------------------------------------------------------------------
+    // public instsll functions
+    // ----------------------------------------------------------------------
+
+    /**
+     * download latest package of the product
+     * @param boolean  $bForce  if download file exists downoad again? Default is true
+     * @return bool
+     */
+    function download($bForce=true) {
+        $sUrl = $this->aCfg['source'];
+        $sZipfile = $this->_getZipfilename();
+
+        if (file_exists($sZipfile)){
+            if (!$bForce) {
+                echo "WARNING: file $sZipfile was downloaded already. Skipping download.\n";
+                return true;
+            } else {
+                unlink($sZipfile);
+            }
+        }
+        if(!is_writable(dirname($sZipfile))){
+            die("FATAL ERROR: download won\'t be started. Direcory is not writable: ".dirname($sZipfile).".\n");
+        }
+
+        echo "INFO: fetching url $sUrl ...\n";
+        $sData = $this->_httpGet($sUrl);
+        echo 'INFO: size is '.strlen($sData) . " byte\n";
+        
+        if (strlen($sData) < 1000) {
+            die("FATAL ERROR: download failed. The download file seems to be too small.\n");
+        }
+        
+        if (!file_put_contents($sZipfile, $sData)){
+            die("ERROR: unable to store download file $sZipfile.\n");
+        } else {
+            echo "INFO: download was saved as: $sZipfile\n";
+        }
+
+        return true;
+    }
+
+    /**
+     * install/ unzip method; extract downloaded zip file into target directory
+     * if the installation was successful the zip file will be deleted
      */
     function install() {
         // $sZipfile = $this->aCfg['tmpzip'];
         $sZipfile = $this->_getZipfilename();
+        if(!file_exists($sZipfile)){
+            die("FATAL ERROR: install won\'t be started. Zip file does not exist: $sZipfile.\n");
+        }
+        
         $sTargetPath = $this->aCfg['installdir'];
-        $zip = new ZipArchive;
         if (is_dir($sTargetPath)) {
             echo "INFO: target directory already exists. Making an update.\n";
         }
+        if(!is_writable($sTargetPath)){
+            die("FATAL ERROR: install won\'t be started. Direcory is not writable: $sTargetPath.\n");
+        }
 
+        $zip = new ZipArchive;
         echo "INFO: extracting $sZipfile...\n";
+        echo "INFO: to $sTargetPath...\n";
+        
         $res = $zip->open($sZipfile);
         if ($res === TRUE) {
             $zip->extractTo($sTargetPath);
@@ -209,7 +301,8 @@ class ahwi {
                 $sFirstDir=preg_replace('#[/\\\].*#', '', dirname($zip->getNameIndex($i).'x'));
                 $aDirs[$sFirstDir]=1;
                 $aEntries[]=$zip->getNameIndex($i);
-                echo '... ' . $zip->getNameIndex($i) . " - $sFirstDir\n";
+                // echo '... ' . $zip->getNameIndex($i) . " - $sFirstDir\n";
+                echo '... ' . $zip->getNameIndex($i) . "\n";
             }
             echo $zip->getStatusString() . "\n";
             echo $zip->numFiles . " entries are in the zip file.\n";
@@ -221,23 +314,30 @@ class ahwi {
                 $this->_moveIfSingleSubdir($sFirstDir, $aEntries);
             }
             
+            // if you come here it was successful ... delete the zip file
             // unlink($sZipfile);
+            
         } else {
-            die("ERROR: unable to open ZIP file\n");
+            die("ERROR: unable to open ZIP file $sZipfile\n");
         }
         if (array_key_exists('postmessage', $this->aCfg)) {
             echo $this->aCfg['postmessage'] . "\n";
         }
+        return true;
     }
 
 
+    /**
+     * postinstall ... unused so far
+     * @return boolean
+     */
     function postinstall() {
         return true;
     }
 
 
     /**
-     * show welcome message
+     * show a user friendly welcome message ... for cli usage
      */
     function welcome() {
         echo "
@@ -247,6 +347,7 @@ What happens next:
 
 --- Download of the files from
     " . $this->aCfg['source'] . "
+    to" . $this->_getZipfilename() . "
 
 --- " . $this->aCfg['product'] . " will be installed in directory
     " . $this->aCfg['installdir'] . "
@@ -254,6 +355,7 @@ What happens next:
     " . getcwd() . "
 
 ";
+        return true;
     }
 
 }
