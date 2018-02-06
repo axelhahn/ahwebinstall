@@ -23,6 +23,7 @@ class ahwi {
     var $aCfg = array();
     var $iTimeStart = false;
     var $sAbout = "PHP WEB INSTALLER";
+    var $aErrors = array();
 
     // ----------------------------------------------------------------------
     // METHODS
@@ -30,13 +31,6 @@ class ahwi {
     public function __construct($aCfg) {
         if (!function_exists("curl_init")) {
             die("ERROR: curl module is required for this installer. Please install php-curl first.");
-        }
-        // on windows the function does not exst
-        if (function_exists("posix_getpwuid")){
-            $processUser = posix_getpwuid(posix_geteuid());
-            if ($processUser['name']=="root"){
-                die("Do not start the installer as user root\n");
-            }
         }
         $this->iTimeStart = microtime(true);
         $this->_setConfig($aCfg);
@@ -228,8 +222,98 @@ class ahwi {
     }
     
     // ----------------------------------------------------------------------
-    // public instsll functions
+    // public install functions
     // ----------------------------------------------------------------------
+    
+    /**
+     * 
+     * @return boolean
+     */
+    private function _checkDenyroot(){
+        // on windows the function does not exst
+        if (function_exists("posix_getpwuid")
+            && isset($this->aCfg['source']['denyroot']) 
+            && $this->aCfg['source']['denyroot'])
+        {
+            $processUser = posix_getpwuid(posix_geteuid());
+            if ($processUser['name']=="root"){
+                $this->aErrors[]="Do not start the installer as user root";
+            }
+        }
+        return true;
+    }
+    
+    /**
+    * check if a php module was found
+    * @return boolean
+    */
+    function _checkModules($aRequiredMods=array()){
+        if (isset($this->aCfg['checks']['phpextensions']) 
+            && is_array($this->aCfg['checks']['phpextensions'])
+            && count($this->aCfg['checks']['phpextensions'])){
+            
+            $aAllMods=get_loaded_extensions(false);
+            asort($aAllMods);
+            
+            foreach($this->aCfg['checks']['phpextensions'] as $sMod){
+                echo $sMod.' - ';
+                if(!array_search($sMod, $aAllMods)===false){
+                    // echo  '<span class="ok">OK</span> installed';
+                } else {
+                    // echo '<span class="error">does not exist</span>';
+                    $this->aErrors[]="php module $sMod was not found";
+                }
+            }
+        }
+
+        return true;  
+    }
+    /**
+    * check php version 
+    * @return boolean
+    */
+    function _checkPhpversion($aRequiredMods=array()){
+        if (isset($this->aCfg['checks']['phpversion']) 
+            && $this->aCfg['checks']['phpversion']
+            && version_compare(phpversion(), $this->aCfg['checks']['phpversion'],'<')){
+            
+            $this->aErrors[]="Your PHP version is ".phpversion()."; required: ".$this->aCfg['checks']['phpversion'];
+        }
+    }
+            
+    /*
+        example for checks:
+        "checks": {
+            "denyroot": true,
+            "phpversion": "5.3",
+            "phpextensions": [ "curl" ]
+        },
+    */
+    
+    /**
+     * check requirements for setup
+     * @return bool
+     */
+    function checkRequirements() {
+        $this->aErrors=array();
+        if(!$this->aCfg['source']){
+            return true;
+        }
+        if (isset($this->aCfg['checks']['phpversion']) 
+            && $this->aCfg['checks']['phpversion']
+            && version_compare(phpversion(), $this->aCfg['checks']['phpversion'],'<')){
+            $this->aErrors[]="Your PHP version is ".phpversion()."; required: ".$this->aCfg['checks']['phpversion'];
+        }
+        $this->_checkModules();
+        $this->_checkDenyroot();
+
+        if(count($this->aErrors)){
+            echo "Check for requirements failed.\n";
+            echo implode("\n*", $this->aErrors);
+            die();
+        }
+        return true;
+    }
 
     /**
      * download latest package of the product
