@@ -24,6 +24,8 @@ class ahwi {
     var $iTimeStart = false;
     var $sAbout = "PHP WEB INSTALLER";
     var $aErrors = array();
+    var $aOK = array();
+    var $sUserAgent = 'php-curl :: axels web installer - see https://github.com/axelhahn/ahwebinstall';
 
     // ----------------------------------------------------------------------
     // METHODS
@@ -56,7 +58,7 @@ class ahwi {
         }
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
         curl_setopt($ch, CURLOPT_TIMEOUT, 5);
-        curl_setopt($ch, CURLOPT_USERAGENT, 'php-curl :: web installer');
+        curl_setopt($ch, CURLOPT_USERAGENT, $sUserAgent);
         curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 0);
         curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, 0);
 
@@ -247,22 +249,31 @@ class ahwi {
     * check if a php module was found
     * @return boolean
     */
+    function _checkPhpModule($sMod){
+        $aAllMods=get_loaded_extensions(false);
+        asort($aAllMods);
+
+        if(!array_search($sMod, $aAllMods)===false){
+            // echo  '<span class="ok">OK</span> installed';
+            return true;
+        } else {
+            // echo '<span class="error">does not exist</span>';
+            $this->aErrors[]="The PHP module $sMod was not found.";
+            return false;
+        }
+    }
+    
+    /**
+    * check if a php module was found
+    * @return boolean
+    */
     function _checkModules($aRequiredMods=array()){
         if (isset($this->aCfg['checks']['phpextensions']) 
             && is_array($this->aCfg['checks']['phpextensions'])
             && count($this->aCfg['checks']['phpextensions'])){
             
-            $aAllMods=get_loaded_extensions(false);
-            asort($aAllMods);
-            
             foreach($this->aCfg['checks']['phpextensions'] as $sMod){
-                echo $sMod.' - ';
-                if(!array_search($sMod, $aAllMods)===false){
-                    // echo  '<span class="ok">OK</span> installed';
-                } else {
-                    // echo '<span class="error">does not exist</span>';
-                    $this->aErrors[]="php module $sMod was not found";
-                }
+                $this->_checkPhpModule($sMod);
             }
         }
 
@@ -308,8 +319,9 @@ class ahwi {
         $this->_checkDenyroot();
 
         if(count($this->aErrors)){
-            echo "Check for requirements failed.\n";
-            echo implode("\n*", $this->aErrors);
+            echo "Check for requirements failed.\n* ";
+            echo implode("\n* ", $this->aErrors);
+            echo "\nABORTING.\n";
             die();
         }
         return true;
@@ -364,9 +376,16 @@ class ahwi {
             die("FATAL ERROR: install won\'t be started. Zip file does not exist: $sZipfile.\n");
         }
         
-        $sTargetPath = $this->aCfg['installdir'];
+        $sTargetPath = getcwd().'/'.$this->aCfg['installdir'];
         if (is_dir($sTargetPath)) {
-            echo "INFO: target directory already exists. Making an update.\n";
+            echo "INFO: target directory [$sTargetPath] already exists. Making an update.\n";
+        } else {
+            echo "INFO: creating target directory [$sTargetPath]...\n";
+            if(mkdir(dirname($sTargetPath), 0750)){
+                echo "INFO: OK, created.\n";
+            } else {
+                die("FATAL ERROR: unable to create directory $sTargetPath.\n");
+            }
         }
         if(!is_writable($sTargetPath)){
             die("FATAL ERROR: install won\'t be started. Direcory is not writable: $sTargetPath.\n");
@@ -426,6 +445,14 @@ class ahwi {
     function welcome() {
         echo "
 ===== " . $this->sAbout . " [" . $this->aCfg['product'] . "] =====
+
+";
+
+        $this->_checkPhpModule('curl');
+        $this->_checkPhpModule('zip');
+        $this->checkRequirements();
+
+echo"
 
 What happens next:
 
