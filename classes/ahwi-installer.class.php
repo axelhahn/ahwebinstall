@@ -32,9 +32,9 @@ class ahwi {
         'git'=>[
             'label'=>'Git',
             'dir'=>'.git',
-            'file'=>'.git',
+            // 'file'=>'.git',
             'check'=>'git --version',
-            'update'=>'git pull',
+            'update'=>'git pull --force',
         ],
         'svn'=>[
             'label'=>'Subversion',
@@ -463,7 +463,7 @@ class ahwi {
         $sCcmd='cd '
             .(PHP_OS_FAMILY=='Windows' ? '/d ' : '')
             .'"'.$sTargetPath.'"'
-            .' && ' . $this->aVcs[$sType]['update']
+            .' && ' . $this->aVcs[$sType]['update'].' 2>&1'
             ;
         exec($sCcmd, $aOutput2, $iRc2);
         return [$iRc2, array_merge($aOutput1, $aOutput2)];
